@@ -35,6 +35,7 @@ pub enum Component {
     R0Vm,
     RustToolchain,
     Risc0Groth16,
+    Risc0Groth16Blake3,
 }
 
 impl fmt::Display for Component {
@@ -52,6 +53,7 @@ impl Component {
             Self::R0Vm => "r0vm",
             Self::RustToolchain => "rust",
             Self::Risc0Groth16 => "risc0-groth16",
+            Self::Risc0Groth16Blake3 => "risc0-groth16-blake3",
         }
     }
 
@@ -82,6 +84,9 @@ impl Component {
             Component::Risc0Groth16 => Err(RzupError::UnsupportedDistributionPlatform(
                 "github download not supported for risc0-groth16".into(),
             )),
+            Component::Risc0Groth16Blake3 => Err(RzupError::UnsupportedDistributionPlatform(
+                "github download not supported for risc0-groth16-blake3".into(),
+            )),
         }
     }
 
@@ -109,6 +114,7 @@ impl Component {
             },
             Component::R0Vm => (format!("r0vm-{platform}"), "tgz"),
             Component::Risc0Groth16 => ("risc0-groth16".to_string(), "tar.xz"),
+            Component::Risc0Groth16Blake3 => ("risc0-groth16-blake3".to_string(), "tar.xz"),
         })
     }
 
@@ -129,7 +135,10 @@ impl Component {
                 version.major, version.minor, version.patch
             ),
             // the remaining use v-prefixed versions
-            Component::CargoRiscZero | Component::R0Vm | Component::Risc0Groth16 => {
+            Component::CargoRiscZero
+            | Component::R0Vm
+            | Component::Risc0Groth16
+            | Component::Risc0Groth16Blake3 => {
                 format!("v{version}")
             }
         }
@@ -143,7 +152,8 @@ impl Component {
             Component::CargoRiscZero
             | Component::R0Vm
             | Component::Gdb
-            | Component::Risc0Groth16 => env.risc0_dir().join("extensions"),
+            | Component::Risc0Groth16
+            | Component::Risc0Groth16Blake3 => env.risc0_dir().join("extensions"),
         }
     }
 
@@ -157,7 +167,9 @@ impl Component {
             | Component::RustToolchain => {
                 base_path.join(format!("v{version}-{self}-{}", env.platform()))
             }
-            Component::Risc0Groth16 => base_path.join(format!("v{version}-{self}")),
+            Component::Risc0Groth16 | Component::Risc0Groth16Blake3 => {
+                base_path.join(format!("v{version}-{self}"))
+            }
         }
     }
 }
@@ -173,6 +185,7 @@ impl FromStr for Component {
             "r0vm" => Ok(Self::R0Vm),
             "rust" => Ok(Self::RustToolchain),
             "risc0-groth16" => Ok(Self::Risc0Groth16),
+            "risc0-groth16-blake3" => Ok(Self::Risc0Groth16Blake3),
             c => Err(RzupError::ComponentNotFound(c.into())),
         }
     }
@@ -349,7 +362,7 @@ pub fn set_default(env: &Environment, component: &Component, version: &Version) 
             &version_dir.join("riscv32im-gdb"),
             &env.risc0_dir().join("bin/riscv32im-gdb"),
         )?,
-        Component::Risc0Groth16 => {}
+        Component::Risc0Groth16 | Component::Risc0Groth16Blake3 => {}
     };
     Ok(())
 }

@@ -35,9 +35,11 @@ fn parse_version_from_tag_name(component: &Component, tag_name: &str) -> Result<
                 || RzupError::InvalidVersion("Invalid version tag format".into()),
             )?)?)
         }
-        Component::Risc0Groth16 => Err(RzupError::UnsupportedDistributionPlatform(
-            "github download not supported for risc0-groth16".into(),
-        )),
+        Component::Risc0Groth16 | Component::Risc0Groth16Blake3 => {
+            Err(RzupError::UnsupportedDistributionPlatform(
+                "github download not supported for risc0-groth16".into(),
+            ))
+        }
     }
 }
 
