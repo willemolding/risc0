@@ -205,6 +205,20 @@ pub trait ProverServer: private::Sealed {
         })
     }
 
+    fn succinct_to_groth16_blake3(
+        &self,
+        receipt: &SuccinctReceipt<ReceiptClaim>,
+    ) -> Result<Groth16Receipt<ReceiptClaim>> {
+        let ident_receipt = self.identity_p254(receipt).unwrap();
+        let seal_bytes = ident_receipt.get_seal_bytes();
+        let seal = shrink_wrap(&seal_bytes)?.to_vec();
+        Ok(Groth16Blake3Receipt {
+            seal,
+            claim: receipt.claim.clone(),
+            verifier_parameters: Groth16ReceiptVerifierParameters::default().digest(),
+        })
+    }
+
     /// Compress a receipt into one with a smaller representation.
     ///
     /// The requested target representation is determined by the [ReceiptKind] specified on the

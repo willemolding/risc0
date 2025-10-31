@@ -32,9 +32,40 @@ pub use self::seal_to_json::to_json;
 pub fn shrink_wrap(identity_p254_seal_bytes: &[u8]) -> Result<Seal> {
     cfg_if::cfg_if! {
         if #[cfg(feature = "cuda")] {
-            self::cuda::shrink_wrap(identity_p254_seal_bytes)
+            self::cuda::shrink_wrap(identity_p254_seal_bytes, Circuit::StarkToSnark)
         } else {
             self::docker::shrink_wrap(identity_p254_seal_bytes)
         }
     }
+}
+
+/// Produce a Groth16 Blake3 proof from an `identity_p254` seal plus
+/// additional inputs required for this circuit
+pub fn shrink_wrap_blake3(
+    identity_p254_seal_bytes: &[u8],
+    journal_bytes: [u8; 32],
+    pre_state_digest: [u8; 32],
+    post_state_digest: [u8; 32],
+    control_id: [u8; 32],
+    succinct_control_root: [u8; 32],
+) -> Result<Seal> {
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "cuda")] {
+            self::cuda::shrink_wrap(identity_p254_seal_bytes, Circuit::StarkToSnarkBlake3{ journal_bytes, pre_state_digest, post_state_digest, control_id, succinct_control_root })
+        } else {
+            panic!("shrink_wrap requires the 'cuda' feature to be enabled");
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Circuit {
+    StarkToSnark,
+    StarkToSnarkBlake3 {
+        journal_bytes: [u8; 32],
+        pre_state_digest: [u8; 32],
+        post_state_digest: [u8; 32],
+        control_id: [u8; 32],
+        succinct_control_root: [u8; 32],
+    },
 }

@@ -21,6 +21,8 @@ use risc0_groth16_sys::{Fp, Groth16Proof, ProveParams};
 use rzup::{Component, Rzup, Version};
 
 use crate::Seal;
+use crate::prove::Circuit;
+use crate::prove::seal_to_json::to_blake3_json;
 
 use super::seal_to_json::to_json;
 
@@ -161,20 +163,51 @@ impl ProveInputs {
     }
 }
 
-pub(crate) fn shrink_wrap(seal_bytes: &[u8]) -> Result<Seal> {
-    tracing::info!("shrink_wrap: {} seal bytes", seal_bytes.len());
+pub(crate) fn shrink_wrap(seal_bytes: &[u8], circuit: Circuit) -> Result<Seal> {
+    tracing::info!(
+        "shrink_wrap: {} seal bytes using {:?}",
+        seal_bytes.len(),
+        circuit
+    );
+
+    let (component, version) = match circuit {
+        Circuit::StarkToSnark => (Component::Risc0Groth16, Version::new(0, 1, 0)),
+        Circuit::StarkToSnarkBlake3 { .. } => {
+            (Component::Risc0Groth16Blake3, Version::new(0, 1, 0))
+        }
+    };
 
     let root_dir = Rzup::new()
         .context("failed to initialize rzup")?
-        .get_version_dir(&Component::Risc0Groth16, &Version::new(0, 1, 0))
+        .get_version_dir(&component, &version)
         .context(
-            "Missing required `risc0-groth16` rzup component. \
+            "Missing required {component} rzup component. \
             To install it, ensure that your `rzup` version is >= 0.5.0, \
-            and then run `rzup install risc0-groth16`.",
+            and then run `rzup install {component}`.",
         )?;
     let prove_inputs = ProveInputs::new(&root_dir).context("failed to open groth16 input files")?;
 
-    let inputs = to_json(seal_bytes)?;
+    let inputs = to_json(seal_bytes).map(|seal_json| {
+        if let Circuit::StarkToSnarkBlake3 {
+            journal_bytes,
+            pre_state_digest,
+            post_state_digest,
+            control_id,
+            succinct_control_root,
+        } = circuit
+        {
+            to_blake3_json(
+                &seal_json,
+                journal_bytes,
+                pre_state_digest,
+                post_state_digest,
+                control_id,
+                succinct_control_root,
+            )
+        } else {
+            Ok(seal_json)
+        }
+    })??;
 
     let graph_path = root_dir.join("stark_verify_graph.bin");
     let witness =

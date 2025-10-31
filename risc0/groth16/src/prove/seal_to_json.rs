@@ -70,3 +70,58 @@ fn to_decimal(s: &str) -> Option<String> {
         .and_then(|stripped| BigUint::from_str_radix(stripped, 16).ok())
         .map(|n| n.to_str_radix(10))
 }
+
+/// Add the additional fields to the input json required
+/// for the Blake3 Groth16 witness generation
+pub(crate) fn to_blake3_json(
+    seal_json: &str,
+    journal_bytes: [u8; 32],
+    pre_state_digest: [u8; 32],
+    post_state_digest: [u8; 32],
+    control_id: [u8; 32],
+    mut succinct_control_root: [u8; 32],
+) -> Result<String> {
+    let mut seal_json: serde_json::Value = serde_json::from_str(&seal_json)?;
+
+    let mut journal_bits = Vec::new();
+    for byte in journal_bytes {
+        for i in 0..8 {
+            journal_bits.push((byte >> (7 - i)) & 1);
+        }
+    }
+    let pre_state_digest_bits: Vec<_> = pre_state_digest
+        .iter()
+        .flat_map(|&byte| (0..8).rev().map(move |i| ((byte >> i) & 1).to_string()))
+        .collect();
+
+    let post_state_digest_bits: Vec<_> = post_state_digest
+        .iter()
+        .flat_map(|&byte| (0..8).rev().map(move |i| ((byte >> i) & 1).to_string()))
+        .collect();
+
+    let mut id_bn254_fr_bits: Vec<String> = control_id
+        .iter()
+        .flat_map(|&byte| (0..8).rev().map(move |i| ((byte >> i) & 1).to_string()))
+        .collect();
+    // remove 248th and 249th bits
+    id_bn254_fr_bits.remove(248);
+    id_bn254_fr_bits.remove(248);
+
+    succinct_control_root.reverse();
+    let succinct_control_root_hex = hex::encode(succinct_control_root);
+
+    let a1_str = succinct_control_root_hex[0..32].to_string();
+    let a0_str = succinct_control_root_hex[32..64].to_string();
+    let a0_dec = to_decimal(&a0_str).context("a0_str returned None")?;
+    let a1_dec = to_decimal(&a1_str).context("a1_str returned None")?;
+
+    let control_root = vec![a0_dec, a1_dec];
+
+    seal_json["journal_digest_bits"] = journal_bits.into();
+    seal_json["pre_state_digest_bits"] = pre_state_digest_bits.into();
+    seal_json["post_state_digest_bits"] = post_state_digest_bits.into();
+    seal_json["id_bn254_fr_bits"] = id_bn254_fr_bits.into();
+    seal_json["control_root"] = control_root.into();
+
+    Ok(serde_json::to_string(&seal_json)?)
+}
