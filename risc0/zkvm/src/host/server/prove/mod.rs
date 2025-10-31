@@ -26,7 +26,7 @@ use std::rc::Rc;
 
 use anyhow::{Result, anyhow, bail, ensure};
 use risc0_core::field::baby_bear::{BabyBear, Elem, ExtElem};
-use risc0_groth16::prove::shrink_wrap;
+use risc0_groth16::prove::{shrink_wrap, shrink_wrap_blake3};
 use risc0_zkp::hal::{CircuitHal, Hal};
 
 use self::{dev_mode::DevModeProver, prover_impl::ProverImpl};
@@ -205,14 +205,34 @@ pub trait ProverServer: private::Sealed {
         })
     }
 
+    /// Compress a [SuccinctReceipt] into a [Groth16Receipt] using the Blake3 circuit
     fn succinct_to_groth16_blake3(
         &self,
         receipt: &SuccinctReceipt<ReceiptClaim>,
+        journal_bytes: [u8; 32],
     ) -> Result<Groth16Receipt<ReceiptClaim>> {
-        let ident_receipt = self.identity_p254(receipt).unwrap();
+        let ident_receipt = self.identity_p254(receipt)?;
         let seal_bytes = ident_receipt.get_seal_bytes();
-        let seal = shrink_wrap(&seal_bytes)?.to_vec();
-        Ok(Groth16Blake3Receipt {
+
+        let receipt_claim = receipt.claim.as_value()?;
+        let pre_state_digest = receipt_claim.pre.digest().as_bytes().try_into()?;
+        let post_state_digest = receipt_claim.post.digest().as_bytes().try_into()?;
+        let control_id = receipt.control_id.as_bytes().try_into()?;
+        let succinct_control_root: [u8; 32] = crate::SuccinctReceiptVerifierParameters::default()
+            .control_root
+            .as_bytes()
+            .try_into()?;
+
+        let seal = shrink_wrap_blake3(
+            &seal_bytes,
+            journal_bytes,
+            pre_state_digest,
+            post_state_digest,
+            control_id,
+            succinct_control_root,
+        )?
+        .to_vec();
+        Ok(Groth16Receipt {
             seal,
             claim: receipt.claim.clone(),
             verifier_parameters: Groth16ReceiptVerifierParameters::default().digest(),
